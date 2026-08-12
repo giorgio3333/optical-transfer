@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Optical Transfer Pro - Complete Edition</title>
+    <style>
+        :root {
+            --bg-dark: #070a13; --bg-card: rgba(15, 23, 42, 0.85);
+            --teal-accent: #00f5d4; --text-light: #f8fafc;
+            --btn-tx: linear-gradient(135deg, #005f73 0%, #00a896 100%);
+            --btn-rx: linear-gradient(135deg, #7b2cbf 0%, #9d4edd 100%);
+            --btn-dl: linear-gradient(135deg, #e63946 0%, #d62828 100%);
+            --btn-go: linear-gradient(135deg, #fca311 0%, #ffb703 100%);
+            --btn-restart: linear-gradient(135deg, #3a86ff 0%, #00b4d8 100%);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        body { background: var(--bg-dark); color: var(--text-light); overflow: hidden; display: flex; flex-direction: column; height: 100vh; }
+        
+        #headerInfo { background: rgba(13, 27, 42, 0.9); color: var(--teal-accent); font-size: 11px; padding: 10px; text-align: center; border-bottom: 1px solid rgba(0, 245, 212, 0.2); display: flex; justify-content: space-between; }
+        
+        #controls { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px; background: rgba(10, 17, 40, 0.85); border-bottom: 1px solid rgba(255, 255, 255, 0.05); z-index: 10; }
+        #fileInput { display: none; }
+        
+        button { flex: 1; padding: 14px; font-weight: bold; border: none; border-radius: 8px; color: white; font-size: 13px; cursor: pointer; text-transform: uppercase; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        #btnTx { background: var(--btn-tx); border: 1px solid rgba(0, 245, 212, 0.3); }
+        #btnRx { background: var(--btn-rx); border: 1px solid rgba(157, 78, 221, 0.3); }
+        #btnDl { background: var(--btn-dl); border: 1px solid rgba(230, 57, 70, 0.3); display: none; }
+        #btnVai { background: var(--btn-go); border: 1px solid rgba(252, 163, 17, 0.3); display: none; flex: 2; color: #000; }
+        #btnRestart { background: var(--btn-restart); border: 1px solid rgba(58, 134, 255, 0.3); display: none; flex: 2; }
+        
+        button:active { filter: brightness(0.8); transform: translateY(2px); }
+
+        #viewContainer { flex: 1; position: relative; background: #000; display: flex; justify-content: center; align-items: center; overflow: hidden; }
+        #txCanvas { width: 100%; height: 100%; display: none; }
+        #rxVideo { width: 100%; height: 100%; object-fit: cover; display: none; }
+        
+        #rxGuide { display: none; position: absolute; top: 10%; left: 5%; right: 5%; bottom: 10%; border: 3px dashed var(--teal-accent); border-radius: 12px; pointer-events: none; z-index: 5; box-shadow: 0 0 0 9999px rgba(0,0,0,0.6); }
+        #rxGuideText { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: var(--teal-accent); font-weight: bold; font-size: 14px; background: rgba(0,0,0,0.7); padding: 10px 20px; border-radius: 8px; }
+
+        #statusOverlay { position: absolute; bottom: 16px; left: 16px; right: 16px; background: var(--bg-card); color: var(--teal-accent); padding: 12px; font-size: 12px; font-family: monospace; border: 1px solid rgba(0, 245, 212, 0.25); border-radius: 8px; pointer-events: none; z-index: 10; text-align: center; }
+    </style>
+</head>
+<body>
+
+    <div id="headerInfo">
+        <span>⏳ Tempo Stimato (ETA): <span id="timeDisplay">0.0s</span></span>
+        <span>📦 Ricevuti: <span id="dataDisplay">0 / 0</span></span>
+    </div>
+    
+    <div id="controls">
+        <input type="file" id="fileInput" accept="*/*">
+        <button id="btnTx" onclick="triggerFileSelect()">📡 Carica File</button>
+        <button id="btnVai" onclick="startCountdown()">🚀 VAI (Avvia Trasmissione)</button>
+        <button id="btnRestart" onclick="restartTransmission()">🔄 Ricomincia da Capo</button>
+        <button id="btnRx" onclick="startReceiver()">👁️ Ricevi</button>
+        <button id="btnDl" onclick="downloadReceivedFile()">💾 Scarica File</button>
+    </div>
+
+    <div id="viewContainer">
+        <canvas id="txCanvas"></canvas>
+        <video id="rxVideo" autoplay playsinline></video>
+        
+        <div id="rxGuide">
+            <div id="rxGuideText">Allinea i bordi dello schermo qui dentro.<br>In attesa del segnale di avvio...</div>
+        </div>
+
+        <div id="statusOverlay">Pronto. Seleziona "Carica File" o "Ricevi".</div>
+    </div>
+
+    <script>
+        const PALETTE = [
+            [0,0,0], [255,255,255], [255,0,0], [0,255,0],
+            [0,0,255], [255,255,0], [0,255,255], [255,0,255],
+            [255,128,0], [128,0,128], [128,255,0], [255,192,203],
+            [0,128,128], [139,69,19], [128,128,128], [180,255,0]
+        ];
+
+        let txInterval = null, rxInterval = null, countdownInterval = null;
+        let packetsList = [];
+        let fileName = "file_ricevuto.bin";
+        let currentPacketIdx = 0;
+        let totalPacketsCount = 0;
+        let receivedPacketsMap = new Map();
+        let isReceiving = false;
+
+        const CELL_SIZE = 12; 
+        const CHUNK_SIZE = 1800; 
+        const FRAME_TIME_MS = 60; // ~16 FPS
+
+        const fileInput = document.getElementById('fileInput');
+        const canvas = document.getElementById('txCanvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const video = document.getElementById('rxVideo');
+        const rxGuide = document.getElementById('rxGuide');
+        const statusOverlay = document.getElementById('statusOverlay');
+        const timeDisplay = document.getElementById('timeDisplay');
+        const dataDisplay = document.getElementById('dataDisplay');
+
+        function triggerFileSelect() { fileInput.click(); }
+
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            fileName = file.name;
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                const rawBuffer = new Uint8Array(ev.target.result);
+                packetsList = [];
+                for (let i = 0; i < rawBuffer.length; i += CHUNK_SIZE) {
+                    let chunk = rawBuffer.slice(i, i + CHUNK_SIZE);
+                    let checksum = chunk.reduce((acc, val) => acc ^ val, 0);
+                    packetsList.push({ id: packetsList.length, data: chunk, chk: checksum });
+                }
+                totalPacketsCount = packetsList.length;
+                
+                let etaSeconds = (totalPacketsCount * FRAME_TIME_MS) / 1000;
+                timeDisplay.innerText = `${etaSeconds.toFixed(1)}s`;
+                
+                document.getElementById('btnTx').style.display = 'none';
+                document.getElementById('btnRx').style.display = 'none';
+                document.getElementById('btnRestart').style.display = 'none';
+                document.getElementById('btnVai').style.display = 'block';
+                updateStatus("FILE PRONTO", `Prepara il ricevitore. Clicca VAI per iniziare.`);
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        function startCountdown() {
+            document.getElementById('btnVai').style.display = 'none';
+            document.getElementById('btnRestart').style.display = 'none';
+            canvas.style.display = 'block';
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight - document.getElementById('controls').offsetHeight - 40;
+            
+            let count = 5;
+            updateStatus("PREPARAZIONE", "Inquadra questo schermo con il ricevitore ora.");
+            
+            countdownInterval = setInterval(() => {
+                ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = 'var(--teal-accent)';
+                ctx.font = 'bold 120px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(count, canvas.width / 2, canvas.height / 2);
+                
+                if (count === 0) {
+                    clearInterval(countdownInterval);
+                    executeTransmission();
+                }
+                count--;
+            }, 1000);
+        }
+
+        function restartTransmission() {
+            if (txInterval) clearInterval(txInterval);
+            if (countdownInterval) clearInterval(countdownInterval);
+            currentPacketIdx = 0;
+            let etaSeconds = (totalPacketsCount * FRAME_TIME_MS) / 1000;
+            timeDisplay.innerText = `${etaSeconds.toFixed(1)}s`;
+            startCountdown();
+        }
+
+        function executeTransmission() {
+            currentPacketIdx = 0;
+            updateStatus("TRASMISSIONE IN CORSO", "Non muovere i dispositivi!");
+            txInterval = setInterval(drawBalancedFrame, FRAME_TIME_MS); 
+        }
+
+        function drawBalancedFrame() {
+            const w = canvas.width;
+            const h = canvas.height;
+            
+            if (currentPacketIdx >= totalPacketsCount) {
+                clearInterval(txInterval);
+                ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
+                ctx.fillStyle = 'var(--teal-accent)';
+                ctx.font = 'bold 30px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText("FILE TRASMESSO", w / 2, h / 2);
+                
+                document.getElementById('btnRestart').style.display = 'block';
+                updateStatus("COMPLETATO", "Trasmissione terminata. Puoi ricominciare da capo senza ricaricare il file.");
+                return;
+            }
+
+            const isPortrait = h > w; 
+            ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
+
+            let pkt = packetsList[currentPacketIdx];
+            let headerBytes = [ pkt.id >> 8, pkt.id & 0xFF, pkt.chk, pkt.data.length >> 8, pkt.data.length & 0xFF ];
+            let payload = new Uint8Array(headerBytes.length + pkt.data.length);
+            payload.set(headerBytes);
+            payload.set(pkt.data, headerBytes.length);
+
+            let startX = 0, startY = 0, cols = 0, rows = 0;
+
+            if (isPortrait) {
+                let barHeight = h / 16; let barWidth = 40;
+                for (let i = 0; i < 16; i++) {
+                    ctx.fillStyle = `rgb(${PALETTE[i].join(',')})`; ctx.fillRect(0, i * barHeight, barWidth, barHeight);
+                }
+                startX = barWidth; startY = 0;
+                cols = Math.floor((w - barWidth) / CELL_SIZE); rows = Math.floor(h / CELL_SIZE);
+            } else {
+                let barWidth = w / 16; let barHeight = 40;
+                for (let i = 0; i < 16; i++) {
+                    ctx.fillStyle = `rgb(${PALETTE[i].join(',')})`; ctx.fillRect(i * barWidth, 0, barWidth, barHeight);
+                }
+                startX = 0; startY = barHeight;
+                cols = Math.floor(w / CELL_SIZE); rows = Math.floor((h - barHeight) / CELL_SIZE);
+            }
+
+            let cellIdx = 0;
+            for (let r = 0; r < rows && cellIdx < payload.length; r++) {
+                for (let c = 0; c < cols && cellIdx < payload.length; c++) {
+                    let colorIdx = payload[cellIdx++] % 16;
+                    ctx.fillStyle = `rgb(${PALETTE[colorIdx].join(',')})`;
+                    ctx.fillRect(startX + (c * CELL_SIZE), startY + (r * CELL_SIZE), CELL_SIZE - 1, CELL_SIZE - 1);
+                }
+            }
+            
+            let packetsLeft = totalPacketsCount - currentPacketIdx;
+            timeDisplay.innerText = `${((packetsLeft * FRAME_TIME_MS) / 1000).toFixed(1)}s`;
+            
+            currentPacketIdx++;
+        }
+
+        async function startReceiver() {
+            if(txInterval) clearInterval(txInterval);
+            if(countdownInterval) clearInterval(countdownInterval);
+            canvas.style.display = 'none';
+            video.style.display = 'block';
+            rxGuide.style.display = 'block'; 
+            document.getElementById('btnTx').style.display = 'none';
+            document.getElementById('btnRestart').style.display = 'none';
+            document.getElementById('btnVai').style.display = 'none';
+            
+            receivedPacketsMap.clear();
+            isReceiving = true;
+            dataDisplay.innerText = `0 Pkt`;
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } } });
+                video.srcObject = stream;
+                
+                if (rxInterval) clearInterval(rxInterval);
+                rxInterval = setInterval(processBalancedFrame, 45); 
+                updateStatus("RICEZIONE IN ATTESA", "Inquadra lo schermo. La ricezione inizierà al primo blocco dati valido.");
+                document.getElementById('btnDl').style.display = 'block';
+            } catch (err) {
+                updateStatus("ERRORE", "Fotocamera non disponibile.");
+            }
+        }
+
+        function processBalancedFrame() {
+            if (!video.videoWidth || !isReceiving) return;
+            
+            const rxCanvas = document.createElement('canvas');
+            rxCanvas.width = video.videoWidth; rxCanvas.height = video.videoHeight;
+            const rxCtx = rxCanvas.getContext('2d', { willReadFrequently: true });
+            rxCtx.drawImage(video, 0, 0, rxCanvas.width, rxCanvas.height);
+            
+            try {
+                let scanStartX = rxCanvas.width * 0.05; let scanStartY = rxCanvas.height * 0.10;
+                let scanW = rxCanvas.width * 0.90; let scanH = rxCanvas.height * 0.80;
+                
+                const imageData = rxCtx.getImageData(scanStartX, scanStartY, scanW, scanH);
+                const pixels = imageData.data;
+                let decodedBytes = [];
+
+                for(let i = 0; i < pixels.length; i += 2800) {
+                    let r = pixels[i], g = pixels[i+1], b = pixels[i+2];
+                    let bestMatch = 0, minDiff = Infinity;
+                    for(let p=0; p<16; p++) {
+                        let diff = Math.abs(r-PALETTE[p][0]) + Math.abs(g-PALETTE[p][1]) + Math.abs(b-PALETTE[p][2]);
+                        if(diff < minDiff) { minDiff = diff; bestMatch = p; }
+                    }
+                    decodedBytes.push(bestMatch);
+                }
+
+                if (decodedBytes.length < 5) return;
+
+                let pktId = (decodedBytes[0] << 8) | decodedBytes[1];
+                let expectedChk = decodedBytes[2];
+                let dataLen = (decodedBytes[3] << 8) | decodedBytes[4];
+                
+                if (dataLen <= CHUNK_SIZE && dataLen > 0) {
+                    let payload = new Uint8Array(decodedBytes.slice(5, 5 + dataLen));
+                    let actualChk = payload.reduce((acc, val) => acc ^ val, 0);
+
+                    if (actualChk === expectedChk) {
+                        if (receivedPacketsMap.size === 0 && pktId === 0) {
+                            document.getElementById('rxGuideText').innerText = "RICEZIONE IN CORSO...\nMantieni fermo!";
+                        }
+
+                        if (!receivedPacketsMap.has(pktId)) {
+                            receivedPacketsMap.set(pktId, payload);
+                            dataDisplay.innerText = `${receivedPacketsMap.size} Pkt`;
+                            rxGuide.style.borderColor = "#00ff00"; 
+                            setTimeout(() => rxGuide.style.borderColor = "var(--teal-accent)", 200);
+                        }
+                    }
+                }
+            } catch (e) {}
+        }
+
+        function downloadReceivedFile() {
+            isReceiving = false;
+            if (rxInterval) clearInterval(rxInterval);
+            if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
+            
+            if (receivedPacketsMap.size === 0) return;
+            
+            let sortedIds = Array.from(receivedPacketsMap.keys()).sort((a,b) => a - b);
+            let totalLength = 0;
+            for (let id of sortedIds) totalLength += receivedPacketsMap.get(id).length;
+
+            let finalFile = new Uint8Array(totalLength);
+            let offset = 0;
+            for (let id of sortedIds) {
+                let buf = receivedPacketsMap.get(id);
+                finalFile.set(buf, offset);
+                offset += buf.length;
+            }
+
+            const blob = new Blob([finalFile], { type: "application/octet-stream" });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = fileName;
+            document.body.appendChild(link); link.click(); document.body.removeChild(link);
+            updateStatus("SCARICATO", "File salvato sul dispositivo.");
+        }
+
+        function updateStatus(title, message) {
+            statusOverlay.innerHTML = `<strong style="color:#fff">${title}</strong><br>${message}`;
+        }
+    </script>
+</body>
+</html>
