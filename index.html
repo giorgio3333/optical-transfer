@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Optical Transfer Pro - Final</title>
+    <style>
+        :root {
+            --bg-dark: #070a13; --bg-card: rgba(15, 23, 42, 0.85);
+            --teal-accent: #00f5d4; --text-light: #f8fafc;
+            --btn-tx: linear-gradient(135deg, #005f73 0%, #00a896 100%);
+            --btn-rx: linear-gradient(135deg, #7b2cbf 0%, #9d4edd 100%);
+            --btn-dl: linear-gradient(135deg, #38b000 0%, #008000 100%);
+            --btn-go: linear-gradient(135deg, #fca311 0%, #ffb703 100%);
+            --btn-home: linear-gradient(135deg, #4a5568 0%, #2d3748 100%);
+            --btn-install: linear-gradient(135deg, #e63946 0%, #d62828 100%);
+            --btn-info: linear-gradient(135deg, #3a86ff 0%, #4361ee 100%);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        body { background: var(--bg-dark); color: var(--text-light); overflow: hidden; display: flex; flex-direction: column; height: 100vh; }
+        
+        #headerContainer { background: rgba(13, 27, 42, 0.9); border-bottom: 1px solid rgba(0, 245, 212, 0.2); }
+        #headerInfo { color: var(--teal-accent); font-size: 11px; padding: 10px; text-align: center; display: flex; justify-content: space-between; align-items: center; }
+        #progressContainer { width: 100%; height: 8px; background: rgba(255,255,255,0.1); }
+        #progressBar { width: 0%; height: 100%; background: var(--teal-accent); transition: width 0.2s linear; }
+        
+        #controls { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px; background: rgba(10, 17, 40, 0.85); border-bottom: 1px solid rgba(255, 255, 255, 0.05); z-index: 10; }
+        
+        #fileInput { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; z-index: -1; }
+        
+        button { flex: 1; padding: 12px; font-weight: bold; border: none; border-radius: 8px; color: white; font-size: 12px; cursor: pointer; text-transform: uppercase; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        #btnHome { background: var(--btn-home); max-width: 45px; font-size: 15px; }
+        #btnInstall { background: var(--btn-install); max-width: 45px; font-size: 15px; }
+        #btnInfo { background: var(--btn-info); max-width: 45px; font-size: 15px; }
+        #btnTx { background: var(--btn-tx); }
+        #btnRx { background: var(--btn-rx); }
+        #btnDl { background: var(--btn-dl); display: none; }
+        #btnVai { background: var(--btn-go); display: none; flex: 2; color: #000; }
+        
+        button:active { filter: brightness(0.8); transform: translateY(2px); }
+
+        #viewContainer { flex: 1; position: relative; background: #000; display: flex; justify-content: center; align-items: center; overflow: hidden; }
+        #txCanvas { width: 100%; height: 100%; display: none; }
+        #rxVideo { width: 100%; height: 100%; object-fit: cover; display: none; }
+        
+        #rxGuide { display: none; position: absolute; top: 10%; left: 5%; right: 5%; bottom: 15%; border: 3px dashed var(--teal-accent); border-radius: 12px; pointer-events: none; z-index: 5; box-shadow: 0 0 0 9999px rgba(0,0,0,0.6); }
+        #rxNoticeBanner { display: none; position: absolute; top: 10px; left: 10px; right: 10px; background: rgba(234, 179, 8, 0.95); color: #000; padding: 10px; font-size: 11px; border-radius: 6px; font-weight: bold; text-align: center; z-index: 20; }
+
+        #statusOverlay { position: absolute; bottom: 16px; left: 16px; right: 16px; background: var(--bg-card); color: var(--teal-accent); padding: 12px; font-size: 12px; font-family: monospace; border: 1px solid rgba(0, 245, 212, 0.25); border-radius: 8px; pointer-events: none; z-index: 10; text-align: center; }
+
+        .modal-overlay { display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 100; justify-content: center; align-items: center; padding: 20px; }
+        .modal-box { background: var(--bg-card); border: 1px solid var(--teal-accent); padding: 20px; border-radius: 12px; text-align: center; width: 100%; max-width: 350px; }
+        .modal-box h3 { margin-bottom: 10px; color: white; }
+        .modal-box p, .modal-box ul { font-size: 13px; color: #ccc; margin-bottom: 20px; text-align: left; padding-left: 15px; }
+        .modal-btns { display: flex; gap: 10px; }
+    </style>
+</head>
+<body>
+
+    <div id="headerContainer">
+        <div id="headerInfo">
+            <span>⏳ ETA: <span id="timeDisplay">0.0s</span></span>
+            <span>📦 Dati: <span id="dataDisplay">0%</span></span>
+        </div>
+        <div id="progressContainer"><div id="progressBar"></div></div>
+    </div>
+    
+    <div id="controls">
+        <button id="btnHome" title="Home">🏠</button>
+        <button id="btnInstall" title="Installa App">📲</button>
+        <button id="btnInfo" title="Istruzioni">ℹ️</button>
+        <input type="file" id="fileInput" accept="*/*">
+        <button id="btnTx">📡 Carica File</button>
+        <button id="btnVai">🚀 VAI (Avvia)</button>
+        <button id="btnRx">👁️ Ricevi</button>
+        <button id="btnDl">💾 Scarica File</button>
+    </div>
+
+    <div id="viewContainer">
+        <div id="rxNoticeBanner">Mantieni l'inquadratura. A trasmissione finita, premi "SCARICA FILE".</div>
+        <canvas id="txCanvas"></canvas>
+        <video id="rxVideo" autoplay playsinline></video>
+        <div id="rxGuide"></div>
+        <div id="statusOverlay">Pronto. Scegli "Carica File" o "Ricevi".</div>
+    </div>
+
+    <div id="compressionModal" class="modal-overlay">
+        <div class="modal-box">
+            <h3>Vuoi comprimere il file?</h3>
+            <p>Riduce i tempi per documenti e testi. Per foto o file già compressi è consigliabile l'originale.</p>
+            <div class="modal-btns">
+                <button id="btnCompressYes" style="background: var(--btn-tx);">Sì, Comprimi</button>
+                <button id="btnCompressNo" style="background: #4a5568;">No, Originale</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="installModal" class="modal-overlay">
+        <div class="modal-box">
+            <h3>Come Installare l'App</h3>
+            <p id="installText"></p>
+            <button id="btnCloseInstall" style="background: var(--btn-rx); width: 100%;">Ho Capito</button>
+        </div>
+    </div>
+
+    <div id="infoModal" class="modal-overlay">
+        <div class="modal-box">
+            <h3>Istruzioni d'Uso</h3>
+            <ul>
+                <li>Alza la luminosità dello schermo trasmittente al massimo.</li>
+                <li>Elimina riflessi di lampadari o luce solare diretta sullo schermo.</li>
+                <li>Sul ricevitore premi <b>Ricevi</b> e inquadra i rettangoli colorati dentro la linea tratteggiata.</li>
+                <li>Il sistema si sincronizza in automatico appena legge i metadati iniziali.</li>
+            </ul>
+            <button id="btnCloseInfo" style="background: var(--btn-info); width: 100%;">Chiudi</button>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const PALETTE = [
+                [0,0,0], [255,255,255], [255,0,0], [0,255,0],
+                [0,0,255], [255,255,0], [0,255,255], [255,0,255],
+                [255,128,0], [128,0,128], [128,255,0], [255,192,203],
+                [0,128,128], [139,69,19], [128,128,128], [180,255,0]
+            ];
+
+            let txInterval = null, rxInterval = null, countdownInterval = null;
+            let packetsList = [];
+            let fileMetadata = { name: "file.bin", type: "application/octet-stream", compressed: false, totalPackets: 0 };
+            let currentPacketIdx = 0;
+            let totalPacketsCount = 0;
+            let receivedPacketsMap = new Map();
+            let isReceiving = false;
+            let pendingFileBuffer = null;
+
+            const CELL_SIZE = 12; 
+            const CHUNK_SIZE = 1800; 
+            const FRAME_TIME_MS = 60;
+
+            const elFileInput = document.getElementById('fileInput');
+            const elCanvas = document.getElementById('txCanvas');
+            const elCtx = elCanvas.getContext('2d', { willReadFrequently: true });
+            const elVideo = document.getElementById('rxVideo');
+            const elProgressBar = document.getElementById('progressBar');
+            const elStatusOverlay = document.getElementById('statusOverlay');
+            const elTimeDisplay = document.getElementById('timeDisplay');
+            const elDataDisplay = document.getElementById('dataDisplay');
+            const elRxGuide = document.getElementById('rxGuide');
+            const elRxNoticeBanner = document.getElementById('rxNoticeBanner');
+
+            // Eventi UI
+            document.getElementById('btnHome').addEventListener('click', resetToHome);
+            document.getElementById('btnInstall').addEventListener('click', showInstallModal);
+            document.getElementById('btnInfo').addEventListener('click', () => { document.getElementById('infoModal').style.display = 'flex'; });
+            document.getElementById('btnCloseInfo').addEventListener('click', () => { document.getElementById('infoModal').style.display = 'none'; });
+            document.getElementById('btnCloseInstall').addEventListener('click', () => { document.getElementById('installModal').style.display = 'none'; });
+            document.getElementById('btnTx').addEventListener('click', () => elFileInput.click());
+            document.getElementById('btnVai').addEventListener('click', startCountdown);
+            document.getElementById('btnRx').addEventListener('click', startReceiver);
+            document.getElementById('btnDl').addEventListener('click', downloadReceivedFile);
+            
+            document.getElementById('btnCompressYes').addEventListener('click', () => processFileSelection(true));
+            document.getElementById('btnCompressNo').addEventListener('click', () => processFileSelection(false));
+
+            function resetToHome() {
+                if (txInterval) clearInterval(txInterval);
+                if (rxInterval) clearInterval(rxInterval);
+                if (countdownInterval) clearInterval(countdownInterval);
+                if (elVideo.srcObject) elVideo.srcObject.getTracks().forEach(t => t.stop());
+
+                isReceiving = false; packetsList = []; receivedPacketsMap.clear();
+                currentPacketIdx = 0; totalPacketsCount = 0; pendingFileBuffer = null;
+                elProgressBar.style.width = "0%";
+
+                elCanvas.style.display = 'none'; elVideo.style.display = 'none';
+                elRxGuide.style.display = 'none'; elRxNoticeBanner.style.display = 'none';
+                
+                document.getElementById('btnTx').style.display = 'flex';
+                document.getElementById('btnRx').style.display = 'flex';
+                document.getElementById('btnInstall').style.display = 'flex';
+                document.getElementById('btnInfo').style.display = 'flex';
+                document.getElementById('btnVai').style.display = 'none';
+                document.getElementById('btnDl').style.display = 'none';
+
+                elTimeDisplay.innerText = "0.0s";
+                elDataDisplay.innerText = "0%";
+                updateStatus("PRONTO", "Scegli 'Carica File' o 'Ricevi'.");
+            }
+
+            function showInstallModal() {
+                const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+                let text = isIOS 
+                    ? "Su iPhone/iPad: tocca <b>Condividi</b> e poi <b>'Aggiungi alla schermata Home'</b>." 
+                    : "Su Android: tocca i <b>tre puntini</b> in alto a destra e seleziona <b>'Installa app'</b>.";
+                document.getElementById('installText').innerHTML = text;
+                document.getElementById('installModal').style.display = 'flex';
+            }
+
+            elFileInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                fileMetadata.name = file.name;
+                fileMetadata.type = file.type || "application/octet-stream";
+                
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    pendingFileBuffer = new Uint8Array(ev.target.result);
+                    document.getElementById('compressionModal').style.display = 'flex';
+                };
+                reader.readAsArrayBuffer(file);
+            });
+
+            async function processFileSelection(useCompression) {
+                document.getElementById('compressionModal').style.display = 'none';
+                updateStatus("ELABORAZIONE...", "Preparazione dati in corso.");
+                
+                let finalBuffer = pendingFileBuffer;
+                fileMetadata.compressed = false;
+
+                if (useCompression && window.CompressionStream) {
+                    try {
+                        const stream = new Blob([pendingFileBuffer]).stream();
+                        const compressedStream = stream.pipeThrough(new CompressionStream('deflate'));
+                        finalBuffer = new Uint8Array(await (new Response(compressedStream)).arrayBuffer());
+                        fileMetadata.compressed = true;
+                    } catch(e) {}
+                }
+
+                packetsList = [];
+                const dataChunksCount = Math.ceil(finalBuffer.length / CHUNK_SIZE);
+                fileMetadata.totalPackets = dataChunksCount;
+
+                const metaString = JSON.stringify(fileMetadata);
+                const metaBytes = new TextEncoder().encode(metaString);
+                let metaChk = metaBytes.reduce((acc, val) => acc ^ val, 0);
+                packetsList.push({ id: 0, data: metaBytes, chk: metaChk });
+
+                for (let i = 0; i < finalBuffer.length; i += CHUNK_SIZE) {
+                    let chunk = finalBuffer.slice(i, i + CHUNK_SIZE);
+                    let checksum = chunk.reduce((acc, val) => acc ^ val, 0);
+                    packetsList.push({ id: packetsList.length, data: chunk, chk: checksum });
+                }
+
+                totalPacketsCount = packetsList.length;
+                let etaSeconds = (totalPacketsCount * FRAME_TIME_MS) / 1000;
+                elTimeDisplay.innerText = `${etaSeconds.toFixed(1)}s`;
+                
+                document.getElementById('btnTx').style.display = 'none';
+                document.getElementById('btnRx').style.display = 'none';
+                document.getElementById('btnInstall').style.display = 'none';
+                document.getElementById('btnInfo').style.display = 'none';
+                document.getElementById('btnVai').style.display = 'flex';
+                updateStatus("PRONTO", "File pronto. Clicca VAI.");
+            }
+
+            function startCountdown() {
+                document.getElementById('btnVai').style.display = 'none';
+                elCanvas.style.display = 'block';
+                elCanvas.width = window.innerWidth;
+                elCanvas.height = window.innerHeight - document.getElementById('controls').offsetHeight - 50;
+                
+                let count = 5;
+                updateStatus("PREPARAZIONE", "Inquadra questo schermo.");
+                
+                countdownInterval = setInterval(() => {
+                    elCtx.fillStyle = '#000'; elCtx.fillRect(0, 0, elCanvas.width, elCanvas.height);
+                    elCtx.fillStyle = 'var(--teal-accent)'; elCtx.font = 'bold 110px Arial';
+                    elCtx.textAlign = 'center'; elCtx.textBaseline = 'middle';
+                    elCtx.fillText(count > 0 ? count : "VIA!", elCanvas.width / 2, elCanvas.height / 2);
+                    
+                    if (count === 0) {
+                        clearInterval(countdownInterval);
+                        executeTransmission();
+                    }
+                    count--;
+                }, 1000);
+            }
+
+            function executeTransmission() {
+                currentPacketIdx = 0;
+                updateStatus("TRASMISSIONE IN CORSO", "Non muovere i dispositivi!");
+                txInterval = setInterval(drawBalancedFrame, FRAME_TIME_MS); 
+            }
+
+            function drawBalancedFrame() {
+                const w = elCanvas.width; const h = elCanvas.height;
+                
+                let progress = (currentPacketIdx / totalPacketsCount) * 100;
+                elProgressBar.style.width = `${progress}%`;
+                elDataDisplay.innerText = `${Math.floor(progress)}%`;
+
+                if (currentPacketIdx >= totalPacketsCount) {
+                    clearInterval(txInterval);
+                    elCtx.fillStyle = '#000'; elCtx.fillRect(0, 0, w, h);
+                    elCtx.fillStyle = 'var(--teal-accent)'; elCtx.font = 'bold 28px Arial';
+                    elCtx.textAlign = 'center'; elCtx.fillText("TRASMESSO", w / 2, h / 2);
+                    updateStatus("COMPLETATO", "Premi 'Scarica File' sul ricevitore.");
+                    elProgressBar.style.width = `100%`;
+                    return;
+                }
+
+                const isPortrait = h > w; 
+                elCtx.fillStyle = '#000'; elCtx.fillRect(0, 0, w, h);
+
+                let pkt = packetsList[currentPacketIdx];
+                let headerBytes = [ pkt.id >> 8, pkt.id & 0xFF, pkt.chk, pkt.data.length >> 8, pkt.data.length & 0xFF ];
+                let payload = new Uint8Array(headerBytes.length + pkt.data.length);
+                payload.set(headerBytes); payload.set(pkt.data, headerBytes.length);
+
+                let startX = 0, startY = 0, cols = 0, rows = 0;
+
+                if (isPortrait) {
+                    let barHeight = h / 16; let barWidth = 40;
+                    for (let i = 0; i < 16; i++) {
+                        elCtx.fillStyle = `rgb(${PALETTE[i].join(',')})`; elCtx.fillRect(0, i * barHeight, barWidth, barHeight);
+                    }
+                    startX = barWidth; startY = 0;
+                    cols = Math.floor((w - barWidth) / CELL_SIZE); rows = Math.floor(h / CELL_SIZE);
+                } else {
+                    let barWidth = w / 16; let barHeight = 40;
+                    for (let i = 0; i < 16; i++) {
+                        elCtx.fillStyle = `rgb(${PALETTE[i].join(',')})`; elCtx.fillRect(i * barWidth, 0, barWidth, barHeight);
+                    }
+                    startX = 0; startY = barHeight;
+                    cols = Math.floor(w / CELL_SIZE); rows = Math.floor((h - barHeight) / CELL_SIZE);
+                }
+
+                let cellIdx = 0;
+                for (let r = 0; r < rows && cellIdx < payload.length; r++) {
+                    for (let c = 0; c < cols && cellIdx < payload.length; c++) {
+                        let colorIdx = payload[cellIdx++] % 16;
+                        elCtx.fillStyle = `rgb(${PALETTE[colorIdx].join(',')})`;
+                        elCtx.fillRect(startX + (c * CELL_SIZE), startY + (r * CELL_SIZE), CELL_SIZE - 1, CELL_SIZE - 1);
+                    }
+                }
+                
+                let packetsLeft = totalPacketsCount - currentPacketIdx;
+                elTimeDisplay.innerText = `${((packetsLeft * FRAME_TIME_MS) / 1000).toFixed(1)}s`;
+                currentPacketIdx++;
+            }
+
+            async function startReceiver() {
+                resetToHome();
+                document.getElementById('btnTx').style.display = 'none';
+                document.getElementById('btnRx').style.display = 'none';
+                document.getElementById('btnInstall').style.display = 'none';
+                document.getElementById('btnInfo').style.display = 'none';
+                document.getElementById('btnDl').style.display = 'flex';
+                elVideo.style.display = 'block';
+                elRxGuide.sty
